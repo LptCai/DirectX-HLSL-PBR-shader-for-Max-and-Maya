@@ -1,0 +1,1 @@
+"C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\fxc.exe" /T fx_5_0 /nologo /Fo "Effect.fxo" V2_uv0bn-pbs_IBLenv.fx
