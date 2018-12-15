@@ -604,7 +604,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	float roughMip = pbrRoughnessBiased * rMipCount;
 
 	// load brdf lookup
-	brdfMap = GGXDistribution(NdotV, pbrRoughnessBiased);
+	float2 brdfMap = GGXDistribution(NdotV, pbrRoughnessBiased);
 	
 	float offset = 0.05f;
 	float3 refractedColor;
