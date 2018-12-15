@@ -1,10 +1,10 @@
 /**
-@file shader_HOG_t_uv0bn-pbs_IBLenv.fx
-@brief Contains the Maya Implementation of the shader_HOG_t_uv0bn-pbs_IBLenv shader program
+@file simplePBR.fx
+@brief Contains simplified implementation of the shader_HOG_t_uv0bn-pbs_IBLenv shader program
+that works in both Autodesk 3D Studio Max and Autodesk Maya
 */
 
-// uncomment to force true for compiling in VS
-//#define _MAYA_ 1
+static const float cg_PI = 3.141592666f;
 
 //------------------------------------
 // Defines
@@ -13,14 +13,10 @@
 // 0 means all possible levels
 // some textures may override this value, but most textures will follow whatever we have defined here
 // If you wish to optimize performance (at the cost of reduced quality), you can set NumberOfMipMaps below to 1
-
-static const float cg_PI = 3.141592666f;
-
 #define NumberOfMipMaps 0
 #define ROUGHNESS_BIAS 0.005
 #define TEMP_IOR 0.03
 #define EPSILON 10e-5f
-//#define saturate(value) clamp(value, 0.000001f, 1.0f)
 
 #define _3DSMAX_SPIN_MAX 99999
 
@@ -140,7 +136,7 @@ cbuffer UpdatePerObject : register(b1)
 	float4x4	WorldIT 			: WorldInverseTranspose < string UIWidget = "None"; > ;
 	float4x4	WorldViewProj		: WorldViewProjection < string UIWidget = "None"; > ;
 
-	//these are per-object includes for this cBuffer
+	// these are per-object includes for this cBuffer
 	// they come from pbr_shader_ui.fxh
 	// "Material Properties" UI group
 	// materialSpecular				scalar 0..1
@@ -198,14 +194,6 @@ cbuffer UpdatePerObject : register(b1)
 	MAYA_DEBUG_NORMALZ
 
 } //end UpdatePerObject cbuffer
-
-  //------------------------------------
-  // DEBUG
-  //------------------------------------
-  /**
-  @Widget DebugMenu
-  @brief provides a menu to the user for enabling debug modes supported by this fx file
-  */
 
 //------------------------------------
 // Hardware Fog parameters
@@ -278,13 +266,9 @@ BrDf
 float GGXDistribution(float NdotH, float roughness)
 
     {
-
         float rough2 = roughness * roughness;
-
         float tmp =  (NdotH * rough2 - NdotH) * NdotH + 1;
-
         return rough2 / (tmp * tmp);
-
     }
 
 /**
@@ -296,12 +280,8 @@ VsOutput vsMain(vsInput v)
 {
 	VsOutput OUT = (VsOutput)0;
 
-
-	//OUT.eye = normalize(mul(World, v.m_Position) - mul(viewInv, float4(0,0,0,1))).xyz;
-
 	OUT.m_Position = mul( float4( v.m_Position, 1.0f ), WorldViewProj );
 
-	//OUT.m_NormalW = normalize(mul(v.m_Normal, WorldIT));
 	OUT.m_NormalW   = normalize( mul( v.m_Normal,   (float3x3)World));
 	OUT.m_TangentW  = normalize( mul( v.m_Tangent,  (float3x3)World));
 	OUT.m_BinormalW = normalize (mul( v.m_Binormal, (float3x3)World));
@@ -431,19 +411,6 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// Multiplier for visualizing the level of detail (see notes for 'nLODThreshold' variable
 	// for how that is done visually)
-
-	// Parallax Mapping and Self-Shadowing
-	// // http://sunandblackcat.com/tipFullView.php?topicid=28
-
-	// Silohuette Parallax Occlusion Mapping
-	// POM clipping, this doesn't work ... and I don't know how to do it properly.
-	//clip(baseUV);
-	//clip(1.0f - baseUV);
-
-	//if (baseUV.x < 0.0 || baseUV.x > 1.0 || baseUV.y < 0.0 || baseUV.y > 1.0)
-	//{
-		//discard;
-	//}
 
 	// texture maps and such
 	//baseColor, need to fetch it now so we can clip against albedo alpha channel
