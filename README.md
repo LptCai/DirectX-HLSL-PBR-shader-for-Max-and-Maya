@@ -6,6 +6,8 @@ https://github.com/hogjonny/Maya-PBR-BRDF-VP2
 
 simplePBR.fx is the main file. simplePBRMaya and simplePBRMax are used to make sure, that value used by shader to recognise software is set.
 
+![alt tag](https://github.com/p4vv37/DirectX-HLSL-PBR-shader-for-Max-and-Maya/blob/master/images/first_preview.PNG)
+
 # How to use
 As in Maya-PBR-BRDF-VP2 by hogjonny Diffuse IBL and Specular IBL need to be .dds maps. They can be generated from hdr files with https://github.com/derkreature/IBLBaker
 
