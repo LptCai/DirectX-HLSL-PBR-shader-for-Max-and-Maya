@@ -18,11 +18,14 @@ static const float cg_PI = 3.141592666f;
 #define TEMP_IOR 0.03
 #define EPSILON 10e-5f
 
+
 #define _3DSMAX_SPIN_MAX 99999
 
-#ifndef _MAYA_
-    #define _3DSMAX_    // at time of writing this shader, Nitrous driver did not have the _3DSMAX_ define set
+#ifdef _3DSMAX_
+	static const float Gamma = 1;
 	#define _ZUP_		// Maya is Y up, 3dsMax is Z up
+#else
+	static const float Gamma = 2.2;
 #endif
 
 // general includes
@@ -62,8 +65,6 @@ SAMPLERMINMAGMIPLINEARWRAP
 SAMPLERSTATESHADOWDEPTH
 // SamplerCubeMap
 SAMPLERCUBEMAP
-// SamplerBrdfLUT
-SAMPLERBRDFLUT
 
 // macro to include Vertex Elements
 // from HOG_shader_ui.fxh macros
@@ -93,8 +94,6 @@ HOG_MAP_BASENORMAL
 HOG_MAP_ROUGHNESS
 // metalnessMap:			Texture2D		
 HOG_MAP_METALNESS 
-// specularMap:				Texture2D
-HOG_MAP_SPECULAR
 
 // These are PBR IBL env related texture inputs
 // diffuseEnvTextureCube
@@ -118,9 +117,6 @@ cbuffer UpdatePerFrame : register(b0)
 	// A shader may wish to do different actions when Maya is rendering the preview swatch (e.g. disable displacement)
 	// This value will be true if Maya is rendering the swatch
 	bool IsSwatchRender : MayaSwatchRender < string UIWidget = "None"; > = false;
-
-	// If the user enables viewport gamma correction in Maya's global viewport rendering settings, the shader should not do gamma again
-	bool MayaFullScreenGamma : MayaGammaCorrection < string UIWidget = "None"; > = false;
 }
 
 //------------------------------------
@@ -138,10 +134,6 @@ cbuffer UpdatePerObject : register(b1)
 	// "Material Properties" UI group
 	// materialBumpIntensity:		scalar 0..1 (soft)
 	HOG_PROPERTY_MATERIAL_BUMPINTENSITY
-	// useVertexC0_RGBA:			bool
-	HOG_PROPERTY_USE_VERTEX_C0_RGBA
-	// useVertexC1_AO:				bool
-	HOG_PROPERTY_USE_VERTEX_C1_AO
 
 	// "Lighting Properties"
 	// materialAmbient:				sRGB
@@ -168,17 +160,6 @@ cbuffer UpdatePerObject : register(b1)
 	HOG_PROPERTY_SHADOW_MULTIPLIER
 	// useShadows:					bool
 	HOG_PROPERTY_SHADOW_USE_SHADOWS
-
-	// gammaCorrectionValue:	float 2.2333
-	HOG_PROPERTY_GAMMA_CORRECTION_VALUE
-	// bloomExp:				float 1.6
-	HOG_PROPERTY_BLOOM_EXP
-	// useLightColorAsLightSpecularColor:	bool
-	HOG_PROPERTY_USE_LIGHT_COLOR_AS_LIGHT_SPECULAR_COLOR
-	// useApproxToneMapping:				bool
-	//HOG_PROPERTY_USE_APPROX_TONE_MAPPING
-	// useGammaCorrectShader:				bool
-	HOG_PROPERTY_GAMMA_CORRECT_SHADER
 
 	// these macros come from mayaUtilities.fxh
 	// NormalCoordsysX
@@ -219,7 +200,7 @@ struct vsInput
 	// missing:
 	float4 m_VertexAO		: COLOR;
 #else
-	float3 m_Position		: POSITION0;
+	float3 m_Position		: POSITION;
 	float4 m_AlbedoRGBA     : COLOR0;
 	float4 m_VertexAO		: COLOR1;
 	float2 m_Uv0			: TEXCOORD0;
@@ -284,25 +265,8 @@ VsOutput vsMain(vsInput v)
 	// we pass vertices in world space
 	OUT.m_WorldPosition = mul(float4(v.m_Position, 1), World);
 
-	if (useVertexC0_RGBA)
-	{
-		// Interpolate and ouput vertex color 0
-		OUT.m_albedoRGBA.rgb = v.m_AlbedoRGBA.rgb;
-		OUT.m_albedoRGBA.w = v.m_AlbedoRGBA.w;
-	}
-
-	// setup Gamma Corrention
-	float gammaCexp = linearSpaceLighting ? gammaCorrectionValue : 1.0;
-
 	// convert sRGB color per-vertex to linear?
-	OUT.m_albedoRGBA.rgb = linearSpaceLighting ? pow(v.m_AlbedoRGBA.rgb, gammaCexp) : OUT.m_albedoRGBA.rgb;
-
-	if (useVertexC1_AO)
-	{
-		// Interpolate and ouput vertex color 1
-		OUT.m_VertexAO.rgb = v.m_VertexAO.rgb;
-		OUT.m_VertexAO.w = v.m_VertexAO.w;
-	}
+	OUT.m_albedoRGBA.rgb = linearSpaceLighting ? pow(v.m_AlbedoRGBA.rgb, Gamma) : OUT.m_albedoRGBA.rgb;
 
 	// Pass through texture coordinates
 	// flip Y for Maya
@@ -319,17 +283,24 @@ VsOutput vsMain(vsInput v)
 	// normalize
 	OUT.m_View.xyz *= rcp(OUT.m_View.w);
 
-	// Compose the tangent space to local space matrix
 	float3x3 tLocal;
+	// Compose the tangent space to local space matrix
 	tLocal[0] = v.m_Tangent;
 	tLocal[1] = v.m_Binormal;
 	tLocal[2] = v.m_Normal;
 
+	#ifdef _3DSMAX_
+		OUT.m_View.xyz = float3(OUT.m_View.x, OUT.m_View.z, -OUT.m_View.y);
+		OUT.m_WorldPosition = OUT.m_WorldPosition[0], OUT.m_WorldPosition[2], -OUT.m_WorldPosition[1];
+
+		tLocal[0] = float3(tLocal[0][0], tLocal[0][2], -tLocal[0][1]);
+		tLocal[1] = float3(tLocal[1][0], tLocal[1][2], -tLocal[1][1]);
+		tLocal[2] = float3(tLocal[2][0], tLocal[2][2], -tLocal[2][1]);
+	#endif
+	//OUT.m_View.xyz = float3(OUT.m_View.z, OUT.m_View.z, OUT.m_View.z);
+
 	// Calculate the tangent to world space matrix
 	OUT.m_TWMtx = mul (tLocal, (float3x3)World );
-
-	// world space to tangent matrix?
-	//OUT.m_WTMtx = transpose(tLocal);
 
 	return OUT;
 }
@@ -356,53 +327,20 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	PsOutput o;
 
 	// MAYA | MAX Stuff
-#ifdef _3DSMAX_
-	FrontFace = !FrontFace;
-#endif
+
+	// HARDCODED
+	#ifdef _3DSMAX_
+		float3 lightDirection = float3(1, 0, -1);
+	#else
+		float3 lightDirection = float3(1, 1, 0);
+	#endif
 	// I think we need to POM before we clip?
 	// 1) silohuette pom clips
 	// 2) we can/should set up UV's before we start sampling textures?
-	
-	// unabashed modification of:  https://github.com/hamish-milne/POMUnity/blob/master/Assets/ParallaxOcclusion.cginc
-	// and: https://www.gamedev.net/articles/programming/graphics/a-closer-look-at-parallax-occlusion-mapping-r3262
-	// with help from:  http://www.d3dcoder.net/Data/Resources/ParallaxOcclusion.pdf
-	// To Do: Put all of this in a function and include file (after it is working)
 	float2 baseUV = p.m_Uv0.xy;
-	float2 pomSsUV = baseUV.xy;
-
-	// Parallax Mapping
-	// Parallax Releif Mapping
-	// http://sunandblackcat.com/tipFullView.php?topicid=28
-
-	// these are also later used in POM self-occlusion
-	float lastSampledHeight = 1.0f;
-	float zStepSize = 0.0f;
-	float2 finalTexOffset = float2(0.0f, 0.0f);
 
 	// store the worldToTangent matrix, but we will only calculate it where we use it
 	float3x3 worldToTangent;
-
-	// To Do: expose these in the UI
-	// The mip level id for transitioning between the full computation
-	// for parallax occlusion mapping and the bump mapping computation
-	bool pomVisualizeLOD = false;
-	int pomLODThreshold = 3;
-	float2 pomTextureDimensions = float2(1024, 1024);
-	float  minTexCoordDelta = 0.0f;
-	float2 deltaTexCoords = float2(0.0f, 0.0f);
-
-	// store gradients
-	float2 dxSize = float2(0.0f, 0.0f);
-	float2 dySize = float2(0.0f, 0.0f);
-	float2 dx = float2(0.0f, 0.0f);
-	float2 dy = float2(0.0f, 0.0f);
-
-	// Compute the current gradients:
-	float2 texCoordsPerSize = float2(baseUV.xy * pomTextureDimensions.xy);
-
-	// Compute all 4 derivatives in x and y in a single instruction to optimize:
-	float4(dxSize, dx) = ddx(float4(texCoordsPerSize, baseUV));
-	float4(dySize, dy) = ddy(float4(texCoordsPerSize, baseUV));
 
 	// Multiplier for visualizing the level of detail (see notes for 'nLODThreshold' variable
 	// for how that is done visually)
@@ -410,9 +348,6 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// texture maps and such
 	//baseColor, need to fetch it now so we can clip against albedo alpha channel
 	float4 baseColorTex = baseColorMap.Sample(SamplerLinearWrap, baseUV).rgba;
-
-	// setup Gamma Corrention
-	float gammaCorrectionExponent = linearSpaceLighting ? gammaCorrectionValue : 1.0f;
 
 	// most textures in this shaders setup, are considered single channel
 	// not sure what happens if say an sRGB image is loaded instead!
@@ -422,42 +357,28 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// fetch the texture, hopefully this works with 3-channel sRGB and 1-channel linear (better validate)
 	// in the case that it is a 3-channel DXT, we pull the green (highest bit-depth)!
 	float3 roughnessTex = roughnessMap.Sample(SamplerLinearWrap, baseUV.xy).rgb;
-	// assume you want the value black (empty) unless a texture is mapped
 	pbrRoughness = roughnessTex.g;
-	// this lets you load a full-range map, then use the material override to scale the value
-	pbrRoughness = lerp( 0.0f, pbrRoughness, 1);
-
 
 	// metalnessMap:			Texture2D
 	float pbrMetalness = 0.0f;
 	float3 metalnessTex = metalnessMap.Sample(SamplerLinearWrap, baseUV.xy).rgb;
 	pbrMetalness = metalnessTex.g;
 
-	// specularMap:				Texture2D
-	float pbrSpecAmount = 0.0f;
-	float specAmountTex = specularMap.Sample(SamplerLinearWrap, baseUV.xy).x;
-	if (specAmountTex > 0)
-		pbrSpecAmount = specAmountTex;
-	pbrSpecAmount = pbrSpecAmount;
 
-	// Normal Map
-	float3 normalRaw = (baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz * 2.0f) - 1.0f;
-
+#ifdef _3DSMAX_
+	float3 normalLin = pow(baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz, 0.455) * 2 - 1;
+#else
+	float3 normalLin = baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz * 2 - 1;
+#endif
 	// FIX UP all color values --> Linear
 	// base color linear
-	float3 bColorLin = pow(baseColorTex.rgb, gammaCorrectionExponent);
-
-	// combine the linear vertex color RGB and the linear base color
-	if (useVertexC0_RGBA)
-		bColorLin.rgb *= p.m_albedoRGBA.rgb;
+	float3 bColorLin = pow(baseColorTex.rgb, Gamma);
 
 	// set up the vertex AO
 	float3 vertAO = (1.0f, 1.0f, 1.0f);
-	if (useVertexC1_AO)
-		vertAO.rgb = p.m_VertexAO.rgb;
 
 	// Calculate the normals with intensity and derive Z
-	float3 nTS = float3(normalRaw.xy * materialBumpIntensity, sqrt(1.0 - saturate(dot(normalRaw.xy, normalRaw.xy))));
+	float3 nTS = float3(normalLin.xy * materialBumpIntensity, sqrt(1.0 - saturate(dot(normalLin.xy, normalLin.xy))));
 
 	if (flipBackfaceNormals)
 	{
@@ -466,8 +387,10 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// Transform the normal into world space where the light data is
 	// Normalize proper normal lengths after decoding dxt normals and creating Z
-	float3 n = normalize(mul(nTS, p.m_TWMtx));
-	//n = float3(n[0], -n[2], n[1]);
+	
+	//float3 n = normalize(mul(nTS, p.m_TWMtx));
+	//float3 x = nTS.x * float3(p.m_TWMtx[0]);
+	float3 n = (normalLin.x * p.m_TWMtx[0] + normalLin.y * p.m_TWMtx[1]) + normalLin.z * p.m_TWMtx[2];
 
 	// We'll use Maya's SSAO this is mainly here for reference in porting the data to engine
 	//float ssao = ssaoTexture.Sample(ssaoSampler, p.m_Position.xy * targetDimensions.xy).x;
@@ -488,8 +411,6 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// Specular tint (from disney plausible)
 	//float3 bColorLin = albedo.rgb; // pass in color already converted to linear
 
-	// materialSpecular				scalar 0..1
-
 	// luminance approx.
 	float bClum = 0.3f * (float)bColorLin[0] + 0.6f * (float)bColorLin[1] + 0.1f * (float)bColorLin[2];
 	// normalize lum. to isolate hue+sat
@@ -500,70 +421,40 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// build variations of roughness
 	float pbrRoughnessBiased = (float)pbrRoughness * (1.0f - ROUGHNESS_BIAS) + ROUGHNESS_BIAS;
 
-	float3 lightDirection = float3(1, 1, 0);
 	float3 hVec = normalize( p.m_View.xyz + lightDirection) ;
-	float3 hVecDotN = abs( dot( n.xyz, hVec ) ) + EPSILON;
+	// WEIRD CODE ALERT: 
+	float3 hVecDotN = max(0,  dot( hVec, n.xyz ) ) + EPSILON;
 
 	// shadow storage
 	float4 shadow = (1.0f, 1.0f, 1.0f, 1.0f);
 	float selfOccShadow = 1.0;
 
-	// Set up envmap values
-	float3 diffEnvLin = (0.0f, 0.0f, 0.0f);
-	float3 specEnvLin = (0.0f, 0.0f, 0.0f);
-	float4 diffEnvMap = (0.0f, 0.0f, 0.0f, 0.0f);
-	float4 specEnvMap = (0.0f, 0.0f, 0.0f, 0.0f);
-
 	// reflection is incoming light
 	float3 R = -reflect(p.m_View.xyz, n);
-    #ifdef _3DSMax_
-		R = float3(R[0], R[2], R[1]);
-	#endif
+
 	// this probably should not be a constant!
 	const float rMipCount = 9.0f;
 	// calc the mip level to fetch based on roughness
 	float roughMip = pbrRoughnessBiased * rMipCount;
 
+	// Set up envmap values
+	float3 diffEnvMap = diffuseEnvTextureCube.SampleLevel(SamplerCubeMap, n, 0.0f).rgba;
+	float3 specEnvMap = specularEnvTextureCube.SampleLevel(SamplerCubeMap, R, roughMip).rgba;
+
+	float3 specEnv = specEnvMap * envLightingExp;
+	float3 diffEnv = diffEnvMap * envLightingExp;
+
 	float2 brdf = GGXDistribution(hVecDotN, pbrRoughnessBiased);
-	
-	float offset = 0.05f;
-	float3 refractedColor;
-
-	// load cubemaps
-	diffEnvMap = diffuseEnvTextureCube.SampleLevel(SamplerCubeMap, n, 0.0f).rgba;
-	specEnvMap = specularEnvTextureCube.SampleLevel(SamplerCubeMap, R, roughMip).rgba;
-
-	specEnvLin = specEnvMap * envLightingExp;
-
-	// tinted specular verus colored specular for metalness
 	float3 cSpecLin = lerp(Cspec0.rgb, bColorLin.rgb, pbrMetalness) * brdf.x + brdf.y;
 
 	// Multiply the specular by colored specular and specular amount
-	specular.rgb *= cSpecLin.rgb;
-	specEnvLin.rgb *= cSpecLin.rgb;
-	specular.rgb += specEnvLin;
-
-	// ----------------------
-	// FINAL COLOR AND ALPHA:
-	// ----------------------
-	// add the cumulative diffuse and specular
-	//o.m_Color.xyz = (diffuse.xyz * base.xyz) + (specular.xyz * base.xyz);
+	specEnv.rgb *= cSpecLin.rgb;
 	
-	o.m_Color.rgb = (diffEnvMap * mColorLin.rgb * vertAO * ssao);
-	o.m_Color.rgb += cSpecLin * lerp(float3(.06, .06, .06), mColorLin.rgb, pbrMetalness) + specEnvLin*pbrMetalness;
-	//o.m_Color.rgb += (specular.rgb * bColorLin.rgb * vertAO * ssao);
-	//o.m_Color.rgb = roughMip/9.0;
+	o.m_Color.rgb = (diffEnv * mColorLin.rgb * vertAO * ssao);
+	o.m_Color.rgb += cSpecLin * lerp(float3(.06, .06, .06), mColorLin.rgb, pbrMetalness) + specEnv*pbrMetalness;
 	o.m_Color.w = 1;
 	float3 result = o.m_Color.rgb;
-
-#ifdef _MAYA_
-	// do gamma correction and tone mapping in shader:
-	// "none:approx:linear:linearExp:reinhard:reinhardExp:HaarmPeterCurve:HaarmPeterCurveExp:uncharted2FilmicTonemapping:uncharted2FilmicTonemappingExp"
-	if (!MayaFullScreenGamma)
-	{
-		result = reinhardExp(result, bloomExp, gammaCorrectionExponent).rgb;
-	}
-#endif
+	//result = p.m_View;
 
 	// REAL return out...
 	o.m_Color = float4(result.rgb, 1);
@@ -642,12 +533,6 @@ technique11 TessellationOFF
 			}
 	#endif
 	}
-
-float4 k_d  
-<
-	string UIName = "pure color";
-	string UIWidget = "Color";
-> = float4( 1.0f, 1.0f, 1.0f, 1.0f );
 
 ///////// VERTEX SHADING /////////////////////
 

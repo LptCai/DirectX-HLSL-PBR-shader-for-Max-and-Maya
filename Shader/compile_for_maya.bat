@@ -1,1 +1,1 @@
-"C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\fxc.exe" /T fx_5_0 /nologo /Fo "simplePBR.fxo" simplePBR.fx
+"C:\Program Files (x86)\Windows Kits\10\bin\10.0.17763.0\x86\fxc.exe" /T fx_5_0 /nologo /Fo "simplePBRMaya.fxo" simplePBRMaya.fx 
