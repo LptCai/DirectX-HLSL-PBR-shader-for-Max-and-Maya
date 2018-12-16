@@ -1,10 +1,14 @@
 # DirectX HLSL PBR shader for Max and Maya
-A WIP Implementation of a Physically Plausible (PBR/PBS) HLSL Shader that works in both Autodesk 3Ds Max and Autodesk Maya viewports.
+A WIP Implementation of a Physically Plausible (PBR/PBS) HLSL Shader that works in both Autodesk 3Ds Max and Autodesk Maya viewports. It's aiming to be as simple as possible.
 
-This is a simplified and modified version of Maya-PBR-BRDF-VP2 by hogjonny
-https://github.com/hogjonny/Maya-PBR-BRDF-VP2
+This is a simplified and modified version of Maya-PBR-BRDF-VP2 by hogjonny:
+* **Jonny K Galloway** - *Maya-PBR-BRDF-VP2* - [hogjonny](https://github.com/hogjonny/Maya-PBR-BRDF-VP2)
+
+Great thanks for Maya-PBR-BRDF-VP2, it's a great project and source of knowleage with implementation.
 
 simplePBR.fx is the main file. simplePBRMaya and simplePBRMax are used to make sure, that value used by shader to recognise software is set.
+
+![alt tag](https://github.com/p4vv37/DirectX-HLSL-PBR-shader-for-Max-and-Maya/blob/master/images/first_preview.PNG)
 
 # How to use
 As in Maya-PBR-BRDF-VP2 by hogjonny Diffuse IBL and Specular IBL need to be .dds maps. They can be generated from hdr files with https://github.com/derkreature/IBLBaker
