@@ -21,7 +21,8 @@ static const float cg_PI = 3.141592666f;
 #define _3DSMAX_SPIN_MAX 99999
 
 #ifndef _MAYA_
-#define _ZUP_		// Maya is Y up, 3dsMax is Z up
+    #define _3DSMAX_    // at time of writing this shader, Nitrous driver did not have the _3DSMAX_ define set
+	#define _ZUP_		// Maya is Y up, 3dsMax is Z up
 #endif
 
 // general includes
@@ -92,14 +93,10 @@ HOG_MAP_BASENORMAL
 HOG_MAP_ROUGHNESS
 // metalnessMap:			Texture2D		
 HOG_MAP_METALNESS 
-// specularF0Map:			Texture2D
-HOG_MAP_SPECF0 
 // specularMap:				Texture2D
 HOG_MAP_SPECULAR
 
 // These are PBR IBL env related texture inputs
-// brdfTextureMap
-HOG_MAP_BRDF
 // diffuseEnvTextureCube
 HOG_CUBEMAP_IBLDIFF
 // specularEnvTextureCube
@@ -139,8 +136,6 @@ cbuffer UpdatePerObject : register(b1)
 	// these are per-object includes for this cBuffer
 	// they come from pbr_shader_ui.fxh
 	// "Material Properties" UI group
-	// materialSpecular				scalar 0..1
-	HOG_PROPERTY_MATERIAL_SPECULAR
 	// materialBumpIntensity:		scalar 0..1 (soft)
 	HOG_PROPERTY_MATERIAL_BUMPINTENSITY
 	// useVertexC0_RGBA:			bool
@@ -438,19 +433,12 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	float3 metalnessTex = metalnessMap.Sample(SamplerLinearWrap, baseUV.xy).rgb;
 	pbrMetalness = metalnessTex.g;
 
-	// specularF0Map:			Texture2D
-	// should I allow for colored f0?  <-- To Do
-	float3 pbrSpecF0 = float3( 0.04f, 0.04f, 0.04f);  // most materials are this range
-	float3 specF0Tex = specularF0Map.Sample(SamplerLinearWrap, baseUV.xy).rgb;
-	if (specF0Tex.r > 0.0f | specF0Tex.g > 0.0f | specF0Tex.b > 0.0f)
-		pbrSpecF0.rgb = specF0Tex.rgb;
-
 	// specularMap:				Texture2D
 	float pbrSpecAmount = 0.0f;
 	float specAmountTex = specularMap.Sample(SamplerLinearWrap, baseUV.xy).x;
 	if (specAmountTex > 0)
 		pbrSpecAmount = specAmountTex;
-	pbrSpecAmount = lerp(float(0.0f).xxx, pbrSpecAmount, materialSpecular);
+	pbrSpecAmount = pbrSpecAmount;
 
 	// Normal Map
 	float3 normalRaw = (baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz * 2.0f) - 1.0f;
@@ -471,16 +459,6 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// Calculate the normals with intensity and derive Z
 	float3 nTS = float3(normalRaw.xy * materialBumpIntensity, sqrt(1.0 - saturate(dot(normalRaw.xy, normalRaw.xy))));
 
-	// DEBUG controls for flipping any normal component in Maya
-	// (needed to figure out proper directions for X|Y)
-	// PLEASE leave for now
-	if (NormalCoordsysX > 0)
-		nTS.x = -nTS.x;
-	if (NormalCoordsysY > 0)
-		nTS.y = -nTS.y;
-	if (NormalCoordsysZ > 0)
-		nTS.z = -nTS.z;
-
 	if (flipBackfaceNormals)
 	{
 		nTS = lerp(-nTS, nTS, FrontFace);
@@ -489,6 +467,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// Transform the normal into world space where the light data is
 	// Normalize proper normal lengths after decoding dxt normals and creating Z
 	float3 n = normalize(mul(nTS, p.m_TWMtx));
+	//n = float3(n[0], -n[2], n[1]);
 
 	// We'll use Maya's SSAO this is mainly here for reference in porting the data to engine
 	//float ssao = ssaoTexture.Sample(ssaoSampler, p.m_Position.xy * targetDimensions.xy).x;
@@ -499,30 +478,12 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// For calculate lighting contribution per light type
 	// diffuse : Resulting diffuse color
 	float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
+	
 	// specular : Resulting specular color
 	float4 specular = float4(0.0f, 0.0f, 0.0f, 0.0f);
 
 	// base color variant for metals
 	float3 mColorLin = bColorLin.rgb * (1.0f - pbrMetalness);
-
-	// F0 : Specular reflection coefficient (this is a scalar, not a color value!)
-	// non-metals are 3% reflective... approximately
-	// if you were going to hard code something, this would be a good guess
-	// float3 F0 = lerp(float3(0.03, 0.03, 0.03), mColorLin, pbrMetalness);
-	// but some escoteric materials might have different rgb values for F0?
-
-	// If we want to replace this with an F0 input texture
-	// the conversion into color space is pow(F0, 1/2.2333 ) * 255;
-
-	// but lets not hard code it!
-	// IOR values: http://www.pixelandpoly.com/ior.html#C
-	// More IOR:  http://forums.cgsociety.org/archive/index.php?t-513458.html
-	// water has a IOR of 1.333, converted it's F0 is appox 0.02
-	//float3 F0 = abs(pow((1.0f - materialIOR), 2.0f) / pow((1.0f + materialIOR), 2.0f));
-	float3 F0 = float3( 0.0f, 0.0f, 0.0f );
-
-	// if we are using texture data, override
-	F0.rgb = pbrSpecF0.rgb;
 
 	// Specular tint (from disney plausible)
 	//float3 bColorLin = albedo.rgb; // pass in color already converted to linear
@@ -534,24 +495,14 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// normalize lum. to isolate hue+sat
 	float3 Ctint = bClum > 0.0f ? bColorLin / bClum : 1.0f.xxx;
 
-	// calculate the colored specular F0
-	float3 Cspec0 = lerp( (float)materialSpecular * F0.rgb, bColorLin.rgb, (float)pbrMetalness);
+	float3 Cspec0 = lerp( lerp( (float3)1.0f, Ctint.rgb, 1), bColorLin.rgb, (float)pbrMetalness);
 
 	// build variations of roughness
 	float pbrRoughnessBiased = (float)pbrRoughness * (1.0f - ROUGHNESS_BIAS) + ROUGHNESS_BIAS;
-	float roughA = pbrRoughness * pbrRoughness;
-	float roughA2 = roughA * roughA;
 
-	// build roughness biased
-	float roughnessBiasedA = roughA * (1.0f - ROUGHNESS_BIAS) + ROUGHNESS_BIAS;
-	float roughnessBiasedA2 = roughnessBiasedA * roughnessBiasedA;
-
-	// This won't change per-light so calulate it outside of the loop
-	//float NdotV = clamp(dot(n, p.m_View.xyz), 0.00001, 1.0);
-	// constant to prevent NaN
-	//float NdotV = max(dot(n, p.m_View.xyz), 1e-5);	
-	// Avoid artifact - Ref: SIGGRAPH14 - Moving Frosbite to PBR
-	float NdotV = abs( dot( n.xyz, p.m_View.xyz ) ) + EPSILON;
+	float3 lightDirection = float3(1, 1, 0);
+	float3 hVec = normalize( p.m_View.xyz + lightDirection) ;
+	float3 hVecDotN = abs( dot( n.xyz, hVec ) ) + EPSILON;
 
 	// shadow storage
 	float4 shadow = (1.0f, 1.0f, 1.0f, 1.0f);
@@ -565,13 +516,15 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// reflection is incoming light
 	float3 R = -reflect(p.m_View.xyz, n);
+    #ifdef _3DSMax_
+		R = float3(R[0], R[2], R[1]);
+	#endif
 	// this probably should not be a constant!
 	const float rMipCount = 9.0f;
 	// calc the mip level to fetch based on roughness
 	float roughMip = pbrRoughnessBiased * rMipCount;
 
-	// load brdf lookup
-	float2 brdfMap = GGXDistribution(NdotV, pbrRoughnessBiased);
+	float2 brdf = GGXDistribution(hVecDotN, pbrRoughnessBiased);
 	
 	float offset = 0.05f;
 	float3 refractedColor;
@@ -580,19 +533,14 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	diffEnvMap = diffuseEnvTextureCube.SampleLevel(SamplerCubeMap, n, 0.0f).rgba;
 	specEnvMap = specularEnvTextureCube.SampleLevel(SamplerCubeMap, R, roughMip).rgba;
 
-	// decode RGBM --> HDR
-	diffEnvLin = RGBMDecode(diffEnvMap, envLightingExp, gammaCorrectionExponent).rgb;
-	specEnvLin = RGBMDecode(specEnvMap, envLightingExp, gammaCorrectionExponent).rgb;
+	specEnvLin = specEnvMap * envLightingExp;
 
 	// tinted specular verus colored specular for metalness
-	float3 cSpecLin = lerp(Cspec0.rgb, bColorLin.rgb, pbrMetalness) * brdfMap.x + brdfMap.y;
-	//float3 fcSpecLin = Specular_F_Roughness(cSpecLin, roughnessBiased, NdotV);
-
-	diffuse.rgb += diffEnvLin;
+	float3 cSpecLin = lerp(Cspec0.rgb, bColorLin.rgb, pbrMetalness) * brdf.x + brdf.y;
 
 	// Multiply the specular by colored specular and specular amount
-	specular.rgb *= cSpecLin.rgb * materialSpecular;
-	specEnvLin.rgb *= cSpecLin.rgb * materialSpecular;
+	specular.rgb *= cSpecLin.rgb;
+	specEnvLin.rgb *= cSpecLin.rgb;
 	specular.rgb += specEnvLin;
 
 	// ----------------------
@@ -600,10 +548,13 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// ----------------------
 	// add the cumulative diffuse and specular
 	//o.m_Color.xyz = (diffuse.xyz * base.xyz) + (specular.xyz * base.xyz);
-	o.m_Color.rgb = (diffuse.rgb * mColorLin.rgb * vertAO * ssao);
-	o.m_Color.rgb += (specular.rgb * bColorLin.rgb * vertAO * ssao);
+	
+	o.m_Color.rgb = (diffEnvMap * mColorLin.rgb * vertAO * ssao);
+	o.m_Color.rgb += cSpecLin * lerp(float3(.06, .06, .06), mColorLin.rgb, pbrMetalness) + specEnvLin*pbrMetalness;
+	//o.m_Color.rgb += (specular.rgb * bColorLin.rgb * vertAO * ssao);
+	//o.m_Color.rgb = roughMip/9.0;
 	o.m_Color.w = 1;
-	float3 result = o.m_Color.rgb * 1;
+	float3 result = o.m_Color.rgb;
 
 #ifdef _MAYA_
 	// do gamma correction and tone mapping in shader:
@@ -651,13 +602,6 @@ float4 ShadowMapPS(VsOutput v) : SV_Target
 }
 #endif
 
-//------------------------------------
-// Notes
-//------------------------------------
-// Shader uses 'pre-multiplied alpha' as its render state and this Uber Shader is build to work in unison with that.
-// Alternatively, in Maya, the dx11Shader node allows you to set your own render states by supplying the 'overridesDrawState' annotation in the technique
-
-//------------------------------------
 // Techniques
 //------------------------------------
 /**

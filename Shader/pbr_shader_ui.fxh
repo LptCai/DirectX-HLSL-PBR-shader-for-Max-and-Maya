@@ -279,6 +279,7 @@ Note:	IOR conversion into color space is:
     string UIWidget = "Slider";						\
     float UIMin = 0.001;							\
     float UISoftMax = 100.000;						\
+	float UIMax = 100.0f;	                        \
     float UIStep = 0.001;							\
     string UIName = HOG_SCENE_IBLEXP;				\
     int UIOrder = 132;								\
@@ -327,6 +328,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";												\
 	float UIMin = 0.000;													\
 	float UISoftMax = 5.000;												\
+	float UIMax = 5.0;	                        \
 	float UIStep = 0.001;													\
 	int UIOrder = 137;														\
 > = {0.500f};
@@ -338,6 +340,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";												\
 	float UIMin = 0.000;													\
 	float UISoftMax = 5.000;												\
+	float UIMax = 5.0;	                        \
 	float UIStep = 0.001;													\
 	int UIOrder = 138;														\
 > = {0.100f};
@@ -467,6 +470,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";											\
 	float UIMin = 0.00;													\
 	float UISoftMax = 1.0;												\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;												\
 	int UIOrder = 160;													\
 > = 1.00f;
@@ -495,6 +499,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";											\
 	float UIMin = 0.00;													\
 	float UISoftMax = 1.0;												\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;												\
 	int UIOrder = 162;													\
 > = 0.00f;
@@ -509,6 +514,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";											\
 	float UIMin = 0.00;													\
 	float UISoftMax = 1.0;												\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;												\
 	int UIOrder = 163;													\
 > = 0.00f;
@@ -537,6 +543,7 @@ Note:	IOR conversion into color space is:
 	string UIWidget = "Slider";												\
 	float UIMin = 0.00;														\
 	float UISoftMax = 1.0;													\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;													\
 	int UIOrder = 165;														\
 > = 0.00f;
@@ -584,6 +591,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";											\
 	float UISoftMin = 1.0;												\
 	float UISoftMax = 3.0;												\
+	float UIMax = 3.0;	                        \
 	float UIStep = 0.01;												\
 	int UIOrder = 168;													\
 > = 1.45f;  //default to plastic
@@ -598,6 +606,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UISoftMin = 0.020;												\
 	float UISoftMax = 1.0;													\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;													\
 	int UIOrder = 169;														\
 > = 1.00f;
@@ -658,6 +667,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UIMin = 0.001;													\
 	float UISoftMax = 1.0;													\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;													\
 	int UIOrder = 191;														\
 > = 1.00f;
@@ -682,6 +692,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UIMin = 1;														\
 	float UISoftMax = 100;													\
+	float UIMax = 100.0;	                        \
 	float UIStep = 1;														\
 	int UIOrder = 193;														\
 > = 25;
@@ -696,6 +707,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UIMin = 1;														\
 	float UISoftMax = 100;													\
+	float UIMax = 100.0;	                        \
 	float UIStep = 1;														\
 	int UIOrder = 194;														\
 > = 75;
@@ -711,6 +723,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UIMin = 0.001;													\
 	float UISoftMax = 1.0;													\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;													\
 	int UIOrder = 195;														\
 > = 0.09f;
@@ -777,6 +790,7 @@ https://pixelandpoly.com/ior.html
 	string UIWidget = "Slider";												\
 	float UIMin = 0.001;													\
 	float UISoftMax = 1.0;													\
+	float UIMax = 1.0;	                        \
 	float UIStep = 0.01;													\
 	int UIOrder = 200;														\
 > = 1.0f;
@@ -887,6 +901,7 @@ This tends to get affected by scene scale and polygon count of the objects invol
 	string UIWidget = "Slider";													\
 	float UIMin = 0.000;														\
 	float UISoftMax = 10.000;													\
+	float UIMax = 10.0;	                        \
 	float UIStep = 0.001;														\
 	int UIOrder = 405;															\
 > = {0.01f};																	
@@ -1028,6 +1043,7 @@ This tends to get affected by scene scale and polygon count of the objects invol
 	string UIWidget = "Slider";											\
 	float UIMin = 0.0;													\
 	float UISoftMax = 3.0;												\
+	float UIMax = 3.0;	                        \
 	float UIStep = 0.01;												\
 	int UIOrder = 606;													\
 > = 1.6f;																
