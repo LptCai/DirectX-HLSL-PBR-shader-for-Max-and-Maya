@@ -32,7 +32,6 @@ static const float cg_PI = 3.141592666f;
 #include "samplers.fxh"
 
 // maxplay includes
-#include "pbr.sif"
 #include "pbr_shader_ui.fxh"
 #include "toneMapping.fxh"
 
