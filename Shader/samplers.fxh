@@ -63,11 +63,4 @@
     AddressW = Clamp;                                               \
 };
 
-#define SAMPLERBRDFLUT	SamplerState SamplerBrdfLUT	\
-{													\
-	Filter = ANISOTROPIC;							\
-    AddressU  = Wrap;								\
-    AddressV  = Wrap;								\
-	AddressW  = Wrap;								\
-};
 								

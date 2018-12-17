@@ -32,16 +32,12 @@ static const float cg_PI = 3.141592666f;
 #include "samplers.fxh"
 
 // maxplay includes
-#include "lighting.sif"
 #include "pbr.sif"
 #include "pbr_shader_ui.fxh"
 #include "toneMapping.fxh"
 
 // Maya includes
 #include "mayaUtilities.fxh"
-#include "mayaLightsShadowMaps.fxh"
-#include "mayaLights.fxh"
-#include "mayaLightsUtilities.fxh"
 
 // max includes
 #include "maxUtilities.fxh"
@@ -143,31 +139,6 @@ cbuffer UpdatePerObject : register(b1)
 	HOG_PROPERTY_LINEAR_SPACE_LIGHTING
 	// flipBackfaceNormals:			bool
 	HOG_PROPERTY_FLIP_BACKFACE_NORMALS
-
-	// "Shadows"
-	// isShadowCaster:				bool
-	HOG_PROPERTY_IS_SHADOW_CASTER
-	// isShadowReceiver:			bool
-	HOG_PROPERTY_IS_SHADOW_RECEIVER
-	// shadowRangeAuto:				bool
-	HOG_PROPERTY_SHADOW_RANGE_AUTO
-	// shadowRangeMax:				float 0..1000
-	HOG_PROPERTY_SHADOW_RANGE_MAX
-	// Maya shadow preview stuff
-	// shadowDepthBias:				float 0..10
-	HOG_PROPERTY_SHADOW_DEPTH_BIAS
-	// shadowMultiplier:			scalar 0..1
-	HOG_PROPERTY_SHADOW_MULTIPLIER
-	// useShadows:					bool
-	HOG_PROPERTY_SHADOW_USE_SHADOWS
-
-	// these macros come from mayaUtilities.fxh
-	// NormalCoordsysX
-	MAYA_DEBUG_NORMALX
-	// NormalCoordsysY
-	MAYA_DEBUG_NORMALY
-	// NormalCoordsysZ
-	MAYA_DEBUG_NORMALZ
 
 } //end UpdatePerObject cbuffer
 
@@ -285,9 +256,9 @@ VsOutput vsMain(vsInput v)
 
 	float3x3 tLocal;
 	// Compose the tangent space to local space matrix
-	tLocal[0] = v.m_Tangent;
-	tLocal[1] = v.m_Binormal;
-	tLocal[2] = v.m_Normal;
+	tLocal[0] = mul(v.m_Tangent, World);
+	tLocal[1] = mul(v.m_Binormal, World);
+	tLocal[2] = mul(v.m_Normal, World);
 
 	#ifdef _3DSMAX_
 		OUT.m_View.xyz = float3(OUT.m_View.x, OUT.m_View.z, -OUT.m_View.y);
@@ -300,7 +271,7 @@ VsOutput vsMain(vsInput v)
 	//OUT.m_View.xyz = float3(OUT.m_View.z, OUT.m_View.z, OUT.m_View.z);
 
 	// Calculate the tangent to world space matrix
-	OUT.m_TWMtx = mul (tLocal, (float3x3)World );
+	OUT.m_TWMtx = tLocal;
 
 	return OUT;
 }
@@ -330,7 +301,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// HARDCODED
 	#ifdef _3DSMAX_
-		float3 lightDirection = float3(1, 0, -1);
+		float3 lightDirection = float3(1, 1, -1);
 	#else
 		float3 lightDirection = float3(1, 1, 0);
 	#endif
@@ -366,6 +337,8 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 
 #ifdef _3DSMAX_
+	pbrRoughness = pow(pbrRoughness, 0.455);
+	pbrMetalness = pow(pbrMetalness, 0.455);
 	float3 normalLin = pow(baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz, 0.455) * 2 - 1;
 #else
 	float3 normalLin = baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz * 2 - 1;
@@ -397,14 +370,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// I have no idea if there is a way to retreive the viewport AO buffer
 	// I think not, because I beleive it's applied as post processing
 	float ssao = 1.0;  // REPLACED with constant, Maya applies it's own
-
-	// For calculate lighting contribution per light type
-	// diffuse : Resulting diffuse color
-	float4 diffuse = float4(0.0f, 0.0f, 0.0f, 0.0f);
 	
-	// specular : Resulting specular color
-	float4 specular = float4(0.0f, 0.0f, 0.0f, 0.0f);
-
 	// base color variant for metals
 	float3 mColorLin = bColorLin.rgb * (1.0f - pbrMetalness);
 
@@ -454,9 +420,8 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	o.m_Color.rgb += cSpecLin * lerp(float3(.06, .06, .06), mColorLin.rgb, pbrMetalness) + specEnv*pbrMetalness;
 	o.m_Color.w = 1;
 	float3 result = o.m_Color.rgb;
-	//result = p.m_View;
-
-	// REAL return out...
+	
+	//result = p.m_TWMtx[2];
 	o.m_Color = float4(result.rgb, 1);
 	return o;
 }
