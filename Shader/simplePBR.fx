@@ -15,18 +15,13 @@ static const float cg_PI = 3.141592666f;
 // If you wish to optimize performance (at the cost of reduced quality), you can set NumberOfMipMaps below to 1
 #define NumberOfMipMaps 0
 #define ROUGHNESS_BIAS 0.005
-#define TEMP_IOR 0.03
 #define EPSILON 10e-5f
 
 
 #define _3DSMAX_SPIN_MAX 99999
 
-#ifdef _3DSMAX_
-	static const float Gamma = 1;
-	#define _ZUP_		// Maya is Y up, 3dsMax is Z up
-#else
-	static const float Gamma = 2.2;
-#endif
+static const float DffGamma = 0.7;
+static const float Gamma = 1;
 
 // general includes
 #include "samplers.fxh"
@@ -83,6 +78,18 @@ HOG_PROPERTY_VERTEX_ELEMENT_TANGENT
 // from pbr.fxh macros
 // baseColorMap:			Texture2D
 HOG_MAP_BASECOLOR
+HOG_MAP_BASECOLOR1
+HOG_MAP_BASECOLOR2
+HOG_MAP_BASECOLOR3
+HOG_MAP_BASECOLOR4
+HOG_MAP_BASECOLOR5
+
+HOG_MAP_MASK1
+HOG_MAP_MASK2
+HOG_MAP_MASK3
+HOG_MAP_MASK4
+HOG_MAP_MASK5
+
 // baseNormalMap:			Texture2D
 HOG_MAP_BASENORMAL
 // roughnessMap:			Texture2D
@@ -200,15 +207,91 @@ struct VsOutput
 	float3 m_TangentW		: TEXCOORD7;
 	float3 m_BinormalW		: TEXCOORD8;
 };
+
+float3 diffMixer(float3 d0, float3 d1, float3 d2, float3 d3, float3 d4, float3 d5,
+				 float m1, float m2, float m3, float m4, float m5)
+{
+	float budget = 1.0f;
+	float3 result = 0.0f; 
+	float alpha;
+	alpha = min(budget, m1);
+	if (alpha > 0.01)
+	{
+		result += d1*alpha;
+		budget -= alpha;
+	}
+	if (budget < 0.01) { return result; }
+	alpha = min(budget, m2);
+	if (alpha > 0.01)
+	{
+		result += d2*alpha;
+		budget -= alpha;
+	}
+	if (budget < 0.01) { return result; }
+	alpha = min(budget, m3);
+	if (alpha > 0.01)
+	{
+		result += d3*alpha;
+		budget -= alpha;
+	}
+	if (budget < 0.01) { return result; }
+	alpha = min(budget, m4);
+	if (alpha > 0.01)
+	{
+		result += d4*alpha;
+		budget -= alpha;
+	}
+	if (budget < 0.01) { return result; }
+	alpha = min(budget, m5);
+	if (alpha > 0.01)
+	{
+		result += d5*alpha;
+		budget -= alpha;
+	}
+	if (budget < 0.01) { return result; }
+	result += d0*budget;
+	return result;
+}
+
 /**
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 BrDf
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 */
 
-// Cook-Torrance specular BRDF + diffuse
-// Schlick's approximation of the fresnel term
+float G1V(float dotNV, float k)
+{
+	return 1.0f/(dotNV*(1.0f-k)+k);
+}
 
+float LightingFuncGGX(float3 N, float3 V, float3 L, float roughness, float F0)
+{
+	float alpha = roughness*roughness;
+	float3 H = normalize(V+L);
+	float dotNL = saturate(dot(N,L));
+	float dotLH = saturate(dot(L,H));
+	float dotNH = saturate(dot(N,H));
+	float F, D, vis;
+
+	// D
+	float alphaSqr = alpha*alpha;
+	float pi = 3.14159f;
+	float denom = dotNH * dotNH *(alphaSqr-1.0) + 1.0f;
+	D = alphaSqr/(pi * denom * denom);
+
+	// F
+	float dotLH5 = pow(1.0f-dotLH,5);
+	F = F0 + (1.0-F0)*(dotLH5);
+
+	// V
+	float k = alpha/2.0f;
+	float k2 = k*k;
+	float invK2 = 1.0f-k2;
+	vis = rcp(dotLH*dotLH*invK2 + k2);
+
+	float specular = dotNL * D * F * vis;
+	return specular;
+}
 float GGXDistribution(float NdotH, float roughness)
 
     {
@@ -234,9 +317,6 @@ VsOutput vsMain(vsInput v)
 
 	// we pass vertices in world space
 	OUT.m_WorldPosition = mul(float4(v.m_Position, 1), World);
-
-	// convert sRGB color per-vertex to linear?
-	OUT.m_albedoRGBA.rgb = linearSpaceLighting ? pow(v.m_AlbedoRGBA.rgb, Gamma) : OUT.m_albedoRGBA.rgb;
 
 	// Pass through texture coordinates
 	// flip Y for Maya
@@ -299,11 +379,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// MAYA | MAX Stuff
 
 	// HARDCODED
-	#ifdef _3DSMAX_
-		float3 lightDirection = float3(1, 1, -1);
-	#else
-		float3 lightDirection = float3(1, 1, 0);
-	#endif
+	float3 lightDirection = float3(1.3, .5, -1);
 	// I think we need to POM before we clip?
 	// 1) silohuette pom clips
 	// 2) we can/should set up UV's before we start sampling textures?
@@ -317,7 +393,10 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// texture maps and such
 	//baseColor, need to fetch it now so we can clip against albedo alpha channel
-	float4 baseColorTex = baseColorMap.Sample(SamplerLinearWrap, baseUV).rgba;
+	float3 baseColorTex = baseColorMap.Sample(SamplerLinearWrap, baseUV).rgb;
+
+	baseColorTex = diffMixer(baseColorTex, baseColorTex1, baseColorTex2, baseColorTex3, baseColorTex4,baseColorTex5,
+	maskTex1, maskTex2, maskTex3, maskTex4, maskTex5);
 
 	// most textures in this shaders setup, are considered single channel
 	// not sure what happens if say an sRGB image is loaded instead!
@@ -335,16 +414,14 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	pbrMetalness = metalnessTex.g;
 
 
-#ifdef _3DSMAX_
-	pbrRoughness = pow(pbrRoughness, 0.455);
-	pbrMetalness = pow(pbrMetalness, 0.455);
-	float3 normalLin = pow(baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz, 0.455) * 2 - 1;
-#else
-	float3 normalLin = baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz * 2 - 1;
-#endif
+	pbrRoughness = pow(pbrRoughness, 1.0f/Gamma);
+	pbrMetalness = pow(pbrMetalness, 1.0f/Gamma);
+	float3 normalMap = baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz;
+	float3 normalLin = pow(normalMap, 1.0f/Gamma) * 2 - 1;
+
 	// FIX UP all color values --> Linear
 	// base color linear
-	float3 bColorLin = pow(baseColorTex.rgb, Gamma);
+	float3 bColorLin = pow(baseColorTex.rgb, 1.0f/DffGamma);
 
 	// set up the vertex AO
 	float3 vertAO = (1.0f, 1.0f, 1.0f);
@@ -378,17 +455,13 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 
 	// luminance approx.
 	float bClum = 0.3f * (float)bColorLin[0] + 0.6f * (float)bColorLin[1] + 0.1f * (float)bColorLin[2];
-	// normalize lum. to isolate hue+sat
-	float3 Ctint = bClum > 0.0f ? bColorLin / bClum : 1.0f.xxx;
-
-	float3 Cspec0 = lerp( lerp( (float3)1.0f, Ctint.rgb, 1), bColorLin.rgb, (float)pbrMetalness);
 
 	// build variations of roughness
 	float pbrRoughnessBiased = (float)pbrRoughness * (1.0f - ROUGHNESS_BIAS) + ROUGHNESS_BIAS;
 
 	float3 hVec = normalize( p.m_View.xyz + lightDirection) ;
 	// WEIRD CODE ALERT: 
-	float3 hVecDotN = max(0,  dot( hVec, n.xyz ) ) + EPSILON;
+	float hVecDotN = max(0,  dot( hVec, n.xyz ) ) + EPSILON;
 
 	// shadow storage
 	float4 shadow = (1.0f, 1.0f, 1.0f, 1.0f);
@@ -398,7 +471,7 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	float3 R = -reflect(p.m_View.xyz, n);
 
 	// this probably should not be a constant!
-	const float rMipCount = 9.0f;
+	const float rMipCount = 8.0f + pbrMetalness * 15;
 	// calc the mip level to fetch based on roughness
 	float roughMip = pbrRoughnessBiased * rMipCount;
 
@@ -409,18 +482,17 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	float3 specEnv = specEnvMap * envLightingExp;
 	float3 diffEnv = diffEnvMap * envLightingExp;
 
-	float2 brdf = GGXDistribution(hVecDotN, pbrRoughnessBiased);
-	float3 cSpecLin = lerp(Cspec0.rgb, bColorLin.rgb, pbrMetalness) * brdf.x + brdf.y;
+	float specValue = lerp(0.02, bColorLin, pbrMetalness);
+	float3 spec = LightingFuncGGX(n, p.m_View.xyz, lightDirection, pbrRoughnessBiased, specValue);
+	float fresnel = pow(1 - dot(p.m_View.xyz, n), 5);
+	spec.rgb += lerp(lerp(specValue, 1, fresnel), bColorLin, pbrMetalness) * specEnv;
 
-	// Multiply the specular by colored specular and specular amount
-	specEnv.rgb *= cSpecLin.rgb;
-	
 	o.m_Color.rgb = (diffEnv * mColorLin.rgb * vertAO * ssao);
-	o.m_Color.rgb += cSpecLin * lerp(float3(.06, .06, .06), mColorLin.rgb, pbrMetalness) + specEnv*pbrMetalness;
+	o.m_Color.rgb += spec;
 	o.m_Color.w = 1;
 	float3 result = o.m_Color.rgb;
 	
-	//result = p.m_TWMtx[2];
+	result = uncharted2FilmicTonemappingExp(result, Gamma, 1.2);
 	o.m_Color = float4(result.rgb, 1);
 	return o;
 }

@@ -584,18 +584,6 @@ Various Material IOR values
 https://pixelandpoly.com/ior.html
 
 */
-#define HOG_PROPERTY_MATERIAL_IOR	float materialIOR					\
-<																		\
-	string UIGroup = HOG_GRP_MAT_PROPS;									\
-	string UIName = HOG_MATERIAL_IOR;									\
-	string UIWidget = "Slider";											\
-	float UISoftMin = 1.0;												\
-	float UISoftMax = 3.0;												\
-	float UIMax = 3.0;	                        \
-	float UIStep = 0.01;												\
-	int UIOrder = 168;													\
-> = 1.45f;  //default to plastic
-
 /**
 @brief Macro to define the height of the normal bump
 */
@@ -1023,30 +1011,9 @@ This tends to get affected by scene scale and polygon count of the objects invol
 // string UIGroup = "Engine | Scene Preview"; UI 600+
 // ---------------------------------------------
 //#define HOG_GRP_ENGN_PREV "Engine | Scene Preview"
-
-/**
-@brief the gamma correct expoenent
-*/
-#define HOG_PROPERTY_GAMMA_CORRECTION_VALUE float gammaCorrectionValue	\
-<																		\
-	string UIGroup = HOG_GRP_ENGN_PREV;									\
-	int UIOrder = 605;													\
-> = 2.233333333f;														
-
 /**
 @brief the tone mapping bloom exponent
 */
-#define HOG_PROPERTY_BLOOM_EXP float bloomExp							\
-<																		\
-	string UIGroup = HOG_GRP_ENGN_PREV;									\
-	string UIName = HOG_GAMMA_BLOOM_EXP;								\
-	string UIWidget = "Slider";											\
-	float UIMin = 0.0;													\
-	float UISoftMax = 3.0;												\
-	float UIMax = 3.0;	                        \
-	float UIStep = 0.01;												\
-	int UIOrder = 606;													\
-> = 1.6f;																
 
 /**
 @brief Use the lights color value as the light/material specular color value
@@ -1069,17 +1036,6 @@ string UIGroup = HOG_GRP_ENGN_PREV;														\
 string UIName = HOG_USE_APPROX_TONE_MAPPING;											\
 int UIOrder = 608;																		\
 > = false;	
-
-/**
-@brief Gamma correct the shader [Debug]
-*/
-#define HOG_PROPERTY_GAMMA_CORRECT_SHADER bool useGammaCorrectShader	\
-<																		\
-string UIGroup = HOG_GRP_ENGN_PREV;										\
-string UIName = HOG_GAMMA_CORRECT_SHADER;								\
-int UIOrder = 609;														\
-> = true;	
-
 /**
 @brief A Film LUT for HaarmPeterCurve()
 */
@@ -1096,3 +1052,4 @@ int UIOrder = 609;														\
 >;
 
 #endif // #ifndef _SHADER_PBR_FXH_
+
