@@ -4,7 +4,11 @@
 that works in both Autodesk 3D Studio Max and Autodesk Maya
 */
 
+/* Some tunning, set here to match Painter a little bit more */
 static const float cg_PI = 3.141592666f;
+static const float blikMultiplier = 15;
+static const float mipMultiplier = 15;
+static const float3 lightDirection = float3(1.3, .5, -1);
 
 //------------------------------------
 // Defines
@@ -20,8 +24,7 @@ static const float cg_PI = 3.141592666f;
 
 #define _3DSMAX_SPIN_MAX 99999
 
-static const float DffGamma = 0.7;
-static const float Gamma = 1;
+static const float diffGamma = 2.2;
 
 // general includes
 #include "samplers.fxh"
@@ -78,17 +81,6 @@ HOG_PROPERTY_VERTEX_ELEMENT_TANGENT
 // from pbr.fxh macros
 // baseColorMap:			Texture2D
 HOG_MAP_BASECOLOR
-HOG_MAP_BASECOLOR1
-HOG_MAP_BASECOLOR2
-HOG_MAP_BASECOLOR3
-HOG_MAP_BASECOLOR4
-HOG_MAP_BASECOLOR5
-
-HOG_MAP_MASK1
-HOG_MAP_MASK2
-HOG_MAP_MASK3
-HOG_MAP_MASK4
-HOG_MAP_MASK5
 
 // baseNormalMap:			Texture2D
 HOG_MAP_BASENORMAL
@@ -138,10 +130,7 @@ cbuffer UpdatePerObject : register(b1)
 	HOG_PROPERTY_MATERIAL_BUMPINTENSITY
 
 	// "Lighting Properties"
-	// materialAmbient:				sRGB
-	// this is the amount of ambient influence 3-channel
-	//HOG_PROPERTY_MATERIAL_AMBIENT
-	// linearSpaceLighting:			bool
+	// linearOutput:			bool
 	HOG_PROPERTY_LINEAR_SPACE_LIGHTING
 	// flipBackfaceNormals:			bool
 	HOG_PROPERTY_FLIP_BACKFACE_NORMALS
@@ -200,7 +189,6 @@ struct VsOutput
 	float4 m_WorldPosition	: TEXCOORD1_centroid;
 	float4 m_View			: TEXCOORD2_centroid;
 	float3x3 m_TWMtx		: TEXCOORD3_centroid;
-	//float3x3 m_WTMtx		: TEXCOORD8_centroid;
 
 	// should I convert these to float4!?
 	float3 m_NormalW		: TEXCOORD6;
@@ -208,57 +196,16 @@ struct VsOutput
 	float3 m_BinormalW		: TEXCOORD8;
 };
 
-float3 diffMixer(float3 d0, float3 d1, float3 d2, float3 d3, float3 d4, float3 d5,
-				 float m1, float m2, float m3, float m4, float m5)
+/* Tools */
+
+float3 RGBMDecode ( float4 rgbm, float hdrExp, float gammaExp ) 
 {
-	float budget = 1.0f;
-	float3 result = 0.0f; 
-	float alpha;
-	alpha = min(budget, m1);
-	if (alpha > 0.01)
-	{
-		result += d1*alpha;
-		budget -= alpha;
-	}
-	if (budget < 0.01) { return result; }
-	alpha = min(budget, m2);
-	if (alpha > 0.01)
-	{
-		result += d2*alpha;
-		budget -= alpha;
-	}
-	if (budget < 0.01) { return result; }
-	alpha = min(budget, m3);
-	if (alpha > 0.01)
-	{
-		result += d3*alpha;
-		budget -= alpha;
-	}
-	if (budget < 0.01) { return result; }
-	alpha = min(budget, m4);
-	if (alpha > 0.01)
-	{
-		result += d4*alpha;
-		budget -= alpha;
-	}
-	if (budget < 0.01) { return result; }
-	alpha = min(budget, m5);
-	if (alpha > 0.01)
-	{
-		result += d5*alpha;
-		budget -= alpha;
-	}
-	if (budget < 0.01) { return result; }
-	result += d0*budget;
-	return result;
+    float3 upackRGBhdr = (rgbm.bgr * rgbm.a) * hdrExp;
+    float3 rgbLin = pow(upackRGBhdr.rgb, gammaExp);
+    return rgbLin;
 }
 
-/**
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-BrDf
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-*/
-
+/* BrDf: GGX */
 float G1V(float dotNV, float k)
 {
 	return 1.0f/(dotNV*(1.0f-k)+k);
@@ -292,13 +239,6 @@ float LightingFuncGGX(float3 N, float3 V, float3 L, float roughness, float F0)
 	float specular = dotNL * D * F * vis;
 	return specular;
 }
-float GGXDistribution(float NdotH, float roughness)
-
-    {
-        float rough2 = roughness * roughness;
-        float tmp =  (NdotH * rough2 - NdotH) * NdotH + 1;
-        return rough2 / (tmp * tmp);
-    }
 
 /**
 @brief Entry point to the vertex shader
@@ -335,22 +275,19 @@ VsOutput vsMain(vsInput v)
 
 	float3x3 tLocal;
 	// Compose the tangent space to local space matrix
-	tLocal[0] = mul(v.m_Tangent, World);
-	tLocal[1] = mul(v.m_Binormal, World);
-	tLocal[2] = mul(v.m_Normal, World);
+	OUT.m_TWMtx[0] = mul(v.m_Tangent, World);
+	OUT.m_TWMtx[1] = mul(v.m_Binormal, World);
+	OUT.m_TWMtx[2] = mul(v.m_Normal, World);
 
+	// ZUP/YUP
 	#ifdef _3DSMAX_
 		OUT.m_View.xyz = float3(OUT.m_View.x, OUT.m_View.z, -OUT.m_View.y);
 		OUT.m_WorldPosition = OUT.m_WorldPosition[0], OUT.m_WorldPosition[2], -OUT.m_WorldPosition[1];
 
-		tLocal[0] = float3(tLocal[0][0], tLocal[0][2], -tLocal[0][1]);
-		tLocal[1] = float3(tLocal[1][0], tLocal[1][2], -tLocal[1][1]);
-		tLocal[2] = float3(tLocal[2][0], tLocal[2][2], -tLocal[2][1]);
+		OUT.m_TWMtx[0] = float3(OUT.m_TWMtx[0][0], OUT.m_TWMtx[0][2], -OUT.m_TWMtx[0][1]);
+		OUT.m_TWMtx[1] = float3(OUT.m_TWMtx[1][0], OUT.m_TWMtx[1][2], -OUT.m_TWMtx[1][1]);
+		OUT.m_TWMtx[2] = float3(OUT.m_TWMtx[2][0], OUT.m_TWMtx[2][2], -OUT.m_TWMtx[2][1]);
 	#endif
-	//OUT.m_View.xyz = float3(OUT.m_View.z, OUT.m_View.z, OUT.m_View.z);
-
-	// Calculate the tangent to world space matrix
-	OUT.m_TWMtx = tLocal;
 
 	return OUT;
 }
@@ -376,10 +313,6 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 {
 	PsOutput o;
 
-	// MAYA | MAX Stuff
-
-	// HARDCODED
-	float3 lightDirection = float3(1.3, .5, -1);
 	// I think we need to POM before we clip?
 	// 1) silohuette pom clips
 	// 2) we can/should set up UV's before we start sampling textures?
@@ -388,24 +321,12 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	// store the worldToTangent matrix, but we will only calculate it where we use it
 	float3x3 worldToTangent;
 
-	// Multiplier for visualizing the level of detail (see notes for 'nLODThreshold' variable
-	// for how that is done visually)
-
 	// texture maps and such
-	//baseColor, need to fetch it now so we can clip against albedo alpha channel
 	float3 baseColorTex = baseColorMap.Sample(SamplerLinearWrap, baseUV).rgb;
 
-	baseColorTex = diffMixer(baseColorTex, baseColorTex1, baseColorTex2, baseColorTex3, baseColorTex4,baseColorTex5,
-	maskTex1, maskTex2, maskTex3, maskTex4, maskTex5);
-
-	// most textures in this shaders setup, are considered single channel
-	// not sure what happens if say an sRGB image is loaded instead!
-
 	// roughnessMap:			Texture2D
+	float3 roughnessTex = roughnessMap.Sample(SamplerLinearWrap, baseUV).rgb;
 	float pbrRoughness = 0.0f;  // store it here
-	// fetch the texture, hopefully this works with 3-channel sRGB and 1-channel linear (better validate)
-	// in the case that it is a 3-channel DXT, we pull the green (highest bit-depth)!
-	float3 roughnessTex = roughnessMap.Sample(SamplerLinearWrap, baseUV.xy).rgb;
 	pbrRoughness = roughnessTex.g;
 
 	// metalnessMap:			Texture2D
@@ -413,86 +334,46 @@ PsOutput pMain(VsOutput p, bool FrontFace : SV_IsFrontFace) : SV_Target
 	float3 metalnessTex = metalnessMap.Sample(SamplerLinearWrap, baseUV.xy).rgb;
 	pbrMetalness = metalnessTex.g;
 
-
-	pbrRoughness = pow(pbrRoughness, 1.0f/Gamma);
-	pbrMetalness = pow(pbrMetalness, 1.0f/Gamma);
 	float3 normalMap = baseNormalMap.Sample(SamplerLinearWrap, baseUV).xyz;
-	float3 normalLin = pow(normalMap, 1.0f/Gamma) * 2 - 1;
+	float3 normalLin = normalMap * 2 - 1; // ->Zero centered, (-1, 1)
 
-	// FIX UP all color values --> Linear
-	// base color linear
-	float3 bColorLin = pow(baseColorTex.rgb, 1.0f/DffGamma);
+	float3 bColorLin = pow(baseColorTex.rgb, 1.0f/diffGamma);
 
-	// set up the vertex AO
-	float3 vertAO = (1.0f, 1.0f, 1.0f);
-
-	// Calculate the normals with intensity and derive Z
-	float3 nTS = float3(normalLin.xy * materialBumpIntensity, sqrt(1.0 - saturate(dot(normalLin.xy, normalLin.xy))));
-
-	if (flipBackfaceNormals)
-	{
-		nTS = lerp(-nTS, nTS, FrontFace);
-	}
-
-	// Transform the normal into world space where the light data is
-	// Normalize proper normal lengths after decoding dxt normals and creating Z
-	
-	//float3 n = normalize(mul(nTS, p.m_TWMtx));
-	//float3 x = nTS.x * float3(p.m_TWMtx[0]);
 	float3 n = (normalLin.x * p.m_TWMtx[0] + normalLin.y * p.m_TWMtx[1]) + normalLin.z * p.m_TWMtx[2];
-
-	// We'll use Maya's SSAO this is mainly here for reference in porting the data to engine
-	//float ssao = ssaoTexture.Sample(ssaoSampler, p.m_Position.xy * targetDimensions.xy).x;
-	// I have no idea if there is a way to retreive the viewport AO buffer
-	// I think not, because I beleive it's applied as post processing
-	float ssao = 1.0;  // REPLACED with constant, Maya applies it's own
 	
 	// base color variant for metals
 	float3 mColorLin = bColorLin.rgb * (1.0f - pbrMetalness);
 
-	// Specular tint (from disney plausible)
-	//float3 bColorLin = albedo.rgb; // pass in color already converted to linear
-
-	// luminance approx.
-	float bClum = 0.3f * (float)bColorLin[0] + 0.6f * (float)bColorLin[1] + 0.1f * (float)bColorLin[2];
-
-	// build variations of roughness
-	float pbrRoughnessBiased = (float)pbrRoughness * (1.0f - ROUGHNESS_BIAS) + ROUGHNESS_BIAS;
-
-	float3 hVec = normalize( p.m_View.xyz + lightDirection) ;
-	// WEIRD CODE ALERT: 
-	float hVecDotN = max(0,  dot( hVec, n.xyz ) ) + EPSILON;
-
-	// shadow storage
-	float4 shadow = (1.0f, 1.0f, 1.0f, 1.0f);
-	float selfOccShadow = 1.0;
-
 	// reflection is incoming light
 	float3 R = -reflect(p.m_View.xyz, n);
-
-	// this probably should not be a constant!
-	const float rMipCount = 8.0f + pbrMetalness * 15;
 	// calc the mip level to fetch based on roughness
-	float roughMip = pbrRoughnessBiased * rMipCount;
+	
+	// How blur blurred refl will be. Also: To mach look in painter value is multiplied for metals. Not sure why it works
+	const float rMipCount = 8.0f + pbrMetalness * mipMultiplier;
+	float roughMip = pbrRoughness * rMipCount;
 
 	// Set up envmap values
-	float3 diffEnvMap = diffuseEnvTextureCube.SampleLevel(SamplerCubeMap, n, 0.0f).rgba;
-	float3 specEnvMap = specularEnvTextureCube.SampleLevel(SamplerCubeMap, R, roughMip).rgba;
+	float4 diffEnvMap = diffuseEnvTextureCube.SampleLevel(SamplerCubeMap, n, 0.0f).rgba;
+	float4 specEnvMap = specularEnvTextureCube.SampleLevel(SamplerCubeMap, R, roughMip).rgba;
 
-	float3 specEnv = specEnvMap * envLightingExp;
-	float3 diffEnv = diffEnvMap * envLightingExp;
+	float3 specEnv = RGBMDecode(specEnvMap, envLightingExp, 1.0f/diffGamma);
+	float3 diffEnv = RGBMDecode(diffEnvMap, envLightingExp, 1.0f/diffGamma);
 
-	float specValue = lerp(0.02, bColorLin, pbrMetalness);
-	float3 spec = LightingFuncGGX(n, p.m_View.xyz, lightDirection, pbrRoughnessBiased, specValue);
+	float specValue = lerp(0.02, 1, pbrMetalness);
+	float3 spec = LightingFuncGGX(n, p.m_View.xyz, lightDirection, pbrRoughness, specValue); //Blink
+	spec *=  blikMultiplier*lerp(1, pow(baseColorTex, 3), pbrMetalness);  //Color and power
 	float fresnel = pow(1 - dot(p.m_View.xyz, n), 5);
-	spec.rgb += lerp(lerp(specValue, 1, fresnel), bColorLin, pbrMetalness) * specEnv;
+	//Now fresnel reflections: lerp(1, baseColorTex*.9 + .1, pbrMetalness) was added to match look in painter.
+	// It should not be there, but then results are weird withstrong normal maps: when mesh should reflect itself in real life
+	spec.rgb += clamp(lerp(lerp(specValue, specValue*baseColorTex, pbrMetalness), lerp(1, baseColorTex*.9 + .1, pbrMetalness), fresnel),0,specValue) * pow(specEnv, 0.6)*2;
 
-	o.m_Color.rgb = (diffEnv * mColorLin.rgb * vertAO * ssao);
+	// Finish:
+	o.m_Color.rgb = (diffEnv * mColorLin.rgb);
 	o.m_Color.rgb += spec;
 	o.m_Color.w = 1;
 	float3 result = o.m_Color.rgb;
-	
-	result = uncharted2FilmicTonemappingExp(result, Gamma, 1.2);
+	// Why does this work? It looks ok imo when linearSpaceOutput is on, but why I need to set gamma to 1/pow(diffGamma, 2) to make it look right with viewport cc?
+	result = reinhardExp(result, 1.3, linearOutput?1.0f/diffGamma: 1/pow(diffGamma, 2));
 	o.m_Color = float4(result.rgb, 1);
 	return o;
 }

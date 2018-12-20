@@ -13,6 +13,8 @@ simplePBR.fx is the main file. simplePBRMaya and simplePBRMax are used to make s
 # How to use
 As in Maya-PBR-BRDF-VP2 by hogjonny Diffuse IBL and Specular IBL need to be .dds maps. They can be generated from hdr files with https://github.com/derkreature/IBLBaker
 
+WARNING: DISABLE VIEWPORT GAMMA CONTROL?COLOR CORRECTION BEFORE USE OR DISABLE LINEAR LIGHTING
+
 Maya:
 Compile the .fx file to fxo with fxc.exe or use compile_for_maya.bat
 In Maya:

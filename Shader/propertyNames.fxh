@@ -148,7 +148,7 @@ If a property name needs to be modified, it would be changed here without needin
 #define HOG_VERTEX_ELEMENT_BINORMAL		"Binormal Format"
 #define HOG_VERTEX_ELEMENT_TANGENT		"Tangent Format"
 
-#define HOG_LINEAR_SPACE_LIGHTING		"Linear Lighting [*]"
+#define HOG_LINEAR		                "Linear"
 #define HOG_LINEAR_VERTEX_COLORS		"Linear Vert Color [*]"
 #define HOG_FLIP_BACKFACE_NORMALS		"Double Sided [*]"
 
